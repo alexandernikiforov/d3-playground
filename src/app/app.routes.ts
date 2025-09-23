@@ -8,5 +8,10 @@ export const routes: Routes = [
     {
         path: 'first-svg',
         loadComponent: () => import('./features/charts/components/first-svg/first-svg').then(m => m.FirstSvg)
+    },
+    {
+        path: 'bar-chart',
+        loadComponent: () => import('./features/charts/components/bar-chart/bar-chart').then(m => m.BarChart)
     }
+
 ];
