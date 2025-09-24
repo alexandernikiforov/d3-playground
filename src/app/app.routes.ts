@@ -12,6 +12,10 @@ export const routes: Routes = [
     {
         path: 'bar-chart',
         loadComponent: () => import('./features/charts/components/bar-chart/bar-chart').then(m => m.BarChart)
+    },
+    {
+        path: 'first-graph',
+        loadComponent: () => import('./features/charts/components/first-graph/first-graph').then(m => m.FirstGraph)
     }
 
 ];
