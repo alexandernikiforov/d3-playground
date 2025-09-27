@@ -16,6 +16,9 @@ export const routes: Routes = [
     {
         path: 'first-graph',
         loadComponent: () => import('./features/charts/components/first-graph/first-graph').then(m => m.FirstGraph)
+    },
+    {
+        path: 'stacked-chart',
+        loadComponent: () => import('./features/charts/components/stacked-chart/stacked-chart').then(m => m.StackedChart)
     }
-
 ];
