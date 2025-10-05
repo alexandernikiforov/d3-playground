@@ -130,6 +130,46 @@ export class FirstGraph implements AfterViewInit {
             .attr("x", xScale(lastDate) + 10)
             .attr("y", yScale(data[data.length - 1].avg_temp_F))
             .attr("fill", aubergine);
+
+        // tooltips
+        const tooltipWidth = 65;
+        const tooltipHeight = 32;
+
+        const tooltip = innerChart
+            .append("g")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        tooltip
+            .append("rect")
+            .attr("width", tooltipWidth)
+            .attr("height", tooltipHeight)
+            .attr("rx", 3)
+            .attr("ry", 3)
+            .attr("fill", aubergine)
+            .attr("fill-opacity", 0.75);
+
+        tooltip
+            .append("text")
+            .text("00.0°F")
+            .attr("x", tooltipWidth / 2)
+            .attr("y", tooltipHeight / 2 + 1)
+            .attr("text-anchor", "middle")
+            .attr("alignment-baseline", "middle")
+            .attr("fill", "white")
+            .style("font-weight", 900);
+
+        // events
+        innerChart.selectAll("circle")
+            .raise()
+            .on("mouseenter", (e, d) => {
+                console.log("DOM event", e);
+                console.log("Attached datum", d);
+            })
+            .on("mouseleave", (e, d) => {
+                console.log("DOM event", e);
+                console.log("Attached datum", d);
+            });
     }
 
     private async loadData() {
