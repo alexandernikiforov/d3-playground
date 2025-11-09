@@ -1,0 +1,18 @@
+#chart {
+    width: 100%;
+    max-width: 1200px;
+    max-height: 1600px;
+    margin: 0 auto;
+}
+
+.tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    visibility: hidden;
+    z-index: 1000;
+}

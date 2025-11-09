@@ -24,5 +24,13 @@ export const routes: Routes = [
     {
         path: 'canvas',
         loadComponent: () => import('./features/charts/components/canvas/canvas').then(m => m.Canvas)
+    },
+    {
+        path: 'heatmap',
+        loadComponent: () => import('./features/charts/components/heatmap/heatmap').then(m => m.Heatmap)
+    },
+    {
+        path: 'zoom-scatter',
+        loadComponent: () => import('./features/charts/components/zoom-scatter/zoom-scatter').then(m => m.ZoomScatter)
     }
 ];
