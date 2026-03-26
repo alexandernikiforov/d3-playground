@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<head>
+    <title>Order Flow</title>
+</head>
+<body>
+<canvas id="c" width="700" height="420" style="border:1px solid #ddd"></canvas>
+<script type="module">
+
+    import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    const margin = {top: 20, right: 20, bottom: 40, left: 50};
+    const w = W - margin.left - margin.right, h = H - margin.top - margin.bottom;
+
+    // Base scales in the drawing area
+    const x0 = d3.scaleLinear().domain([0, 100]).range([margin.left, margin.left + w]);
+    const y0 = d3.scaleLinear().domain([0, 100]).range([margin.top + h, margin.top]);
+
+    const data = d3.range(10000).map(() => ({ x: Math.random()*100, y: Math.random()*100 }));
+
+    function draw(transform = d3.zoomIdentity) {
+        // Derive live scales from transform
+        // We need ranges in *chart coords* (exclude margins)
+        const x = transform.rescaleX(d3.scaleLinear().domain(x0.domain()).range([0, w]));
+        const y = transform.rescaleY(d3.scaleLinear().domain(y0.domain()).range([h, 0]));
+
+        // Convert back to absolute pixel coords by adding margins when drawing
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = "steelblue";
+        ctx.beginPath();
+
+        for (const d of data) {
+            const px = margin.left + x(d.x);
+            const py = margin.top  + (h - y(d.y)); // y is 0..h upward; convert to canvas Y
+            ctx.moveTo(px + 2, py);
+            ctx.arc(px, py, 2, 0, 2*Math.PI);
+        }
+
+        ctx.fill();
+    }
+
+    // Zoom behavior on the canvas element
+    const zoom = d3.zoom()
+        .scaleExtent([1, 12])
+        .translateExtent([[0,0],[w,h]])
+        .extent([[0,0],[w,h]])
+        .on("zoom", (event) => draw(event.transform));
+
+    d3.select(canvas).call(zoom);
+    draw();
+</script>
+</body>
