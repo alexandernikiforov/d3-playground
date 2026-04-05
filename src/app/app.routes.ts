@@ -26,6 +26,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/charts/components/canvas/canvas').then(m => m.Canvas)
     },
     {
+        path: 'canvas-chart',
+        loadComponent: () => import('./features/charts/components/canvas-chart/canvas-chart').then(m => m.CanvasChart)
+    },
+    {
         path: 'heatmap',
         loadComponent: () => import('./features/charts/components/heatmap/heatmap').then(m => m.Heatmap)
     },
