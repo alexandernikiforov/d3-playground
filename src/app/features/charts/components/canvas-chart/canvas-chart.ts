@@ -21,6 +21,13 @@ interface ChartGeometry {
     marginLeft: number;
 }
 
+interface Grid {
+    rowCount: number;
+    columnCount: number;
+    xScale: d3.ScaleLinear<number, number>;
+    yScale: d3.ScaleLinear<number, number>;
+}
+
 @Component({
     selector: 'd3p-canvas-chart',
     imports: [],
@@ -37,7 +44,27 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
 
     private svgGroups: SvgGroups | null = null;
 
+    /**
+     * The number of pixels per tick on the y-axis.
+     * @private
+     */
     private readonly pixelsPerTick = 36;
+
+    /**
+     * The width of a single bucket in the chart.
+     *
+     * @private
+     */
+    private readonly bucketWidth = 120;
+
+    /**
+     * The number of minutes in a single bucket.
+     *
+     * @private
+     */
+    private readonly bucketMinutes = 30;
+
+    private redrawScheduled = false;
 
     ngAfterViewInit(): void {
         this.initChart();
@@ -46,7 +73,7 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         this.refreshChart();
 
         this.resizeObserver = new ResizeObserver(() => {
-            this.refreshChart();
+            this.scheduleRedraw();
         });
 
         this.resizeObserver.observe(this.chartRef().nativeElement);
@@ -57,6 +84,18 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         this.resizeObserver = null;
     }
 
+    private scheduleRedraw(): void {
+        if (this.redrawScheduled) {
+            return;
+        }
+
+        this.redrawScheduled = true;
+
+        requestAnimationFrame(() => {
+            this.redrawScheduled = false;
+            this.refreshChart();
+        });
+    }
     /**
      * Initializes the chart by applying styles and configurations
      * to the SVG element referenced in the component.
@@ -87,9 +126,9 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
     private refreshChart(): void {
         const { width, height } = this.getHostDimensions();
         const marginTop = 20;
-        const marginRight = 60;
-        const marginBottom = 30;
         const marginLeft = 20;
+        const marginBottom = 80;
+        const marginRight = 80;
 
         // recalculate chart geometry
         const geometry: ChartGeometry = {
@@ -103,11 +142,20 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
             marginLeft: marginLeft
         }
 
-        this.refreshSvg(geometry);
-        this.refreshCanvas(geometry);
+        const columnCount = Math.floor(geometry.innerWidth / this.bucketWidth);
+        const rowCount = Math.floor(geometry.innerHeight / this.pixelsPerTick);
+        const grid: Grid = {
+            rowCount: rowCount,
+            columnCount: columnCount,
+            xScale: d3.scaleLinear().domain([0, columnCount]).range([0, geometry.innerWidth]),
+            yScale: d3.scaleLinear().domain([0, rowCount]).range([geometry.innerHeight, 0])
+        }
+
+        this.refreshSvg(geometry, grid);
+        this.refreshCanvas(geometry, grid);
     }
 
-    private refreshSvg(g: ChartGeometry): void {
+    private refreshSvg(g: ChartGeometry, grid: Grid): void {
         const svgElement = this.svgRef().nativeElement;
         const groups = this.svgGroups!;
 
@@ -127,26 +175,57 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         );
 
         // draw axes
-        const visibleTickCount = Math.floor(g.innerHeight / this.pixelsPerTick);
-        const priceLevels = d3.range(visibleTickCount).map(i => 1.0860 - i * 0.0005);
+        // y-axis
+        const visibleTickCount = grid.rowCount;
+        const priceLevels = d3.range(visibleTickCount).map(i => 1.0740 + i * 0.0005);
+        const yScale = grid.yScale;
 
-        const lowest = priceLevels[priceLevels.length - 1];
-        const highest = priceLevels[0];
-
-        const yScale = d3.scaleLinear()
-            .domain([lowest, highest])
-            .range([g.innerHeight, 0]);
+        const priceTickPositions = priceLevels.map((price, i) => ({
+            y: i + 0.5,
+            label: d3.format('.4f')(price)
+        }));
 
         const yAxisGenerator = d3.axisRight(yScale)
-            .tickValues(priceLevels)
-            .tickFormat(d3.format('.4f'));
+            .tickValues(priceTickPositions.map(d => d.y))
+            .tickFormat((y) => {
+                const tick = priceTickPositions.find(d => d.y === y);
+                return tick ? tick.label : '';
+            })
+            .tickSizeOuter(0);
 
         this.svgGroups!.yAxis.call(yAxisGenerator)
             .selectAll('text')
-            .style('font-size', '20px');
+            .style('font-size', '16px');
+
+        // x-axis
+        const anchorTime = new Date(2026, 0, 1, 21, 30);
+        const visibleColumnCount = grid.columnCount;
+        const xScale = grid.xScale;
+
+        const timeBuckets = d3.range(visibleColumnCount).map(i =>
+            new Date(anchorTime.getTime() + i * this.bucketMinutes * 60 * 1000)
+        );
+
+        const timeTickPositions = timeBuckets.map((bucket, i) => ({
+            x: i + 0.5,
+            label: d3.timeFormat('%H:%M')(bucket)
+        }));
+
+        const xAxisGenerator = d3.axisBottom(xScale)
+            .tickValues(timeTickPositions.map(d => d.x))
+            .tickFormat((x) => {
+                const tick = timeTickPositions.find(d => d.x === x);
+                return tick ? tick.label : '';
+            })
+            .tickSizeOuter(0);
+
+        this.svgGroups!.xAxis.call(xAxisGenerator)
+            .selectAll('text')
+            .style('font-size', '16px');
+
     }
 
-    private refreshCanvas(g: ChartGeometry): void {
+    private refreshCanvas(g: ChartGeometry, grid: Grid): void {
         const canvasElement = this.canvasRef().nativeElement;
 
         // reset canvas context and size
@@ -165,12 +244,44 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         ctx.clearRect(0, 0, g.outerWidth, g.outerHeight);
 
         // draw what we need to draw on the canvas
-        this.draw(ctx, g);
+        this.draw(ctx, g, grid);
     }
 
-    private draw(ctx: CanvasRenderingContext2D, g: ChartGeometry): void {
-        ctx.fillStyle = "lightblue";
-        ctx.fillRect(20, 20, g.outerWidth - 140, g.outerHeight - 40);
+    private draw(ctx: CanvasRenderingContext2D, g: ChartGeometry, grid: Grid): void {
+        // ctx.fillStyle = "lightblue";
+        // ctx.fillRect(g.marginLeft, g.marginTop, g.innerWidth, g.innerHeight);
+
+        // draw the grid
+        const originY = g.marginTop;
+        const originX = g.marginLeft;
+
+        ctx.save();
+
+        ctx.strokeStyle = '#d3d3d3';
+        // ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1;
+
+        // horizontal lines
+        for (let row = 0; row <= grid.rowCount; row++) {
+            const y = originY + grid.yScale(row) + 0.5;
+
+            ctx.beginPath();
+            ctx.moveTo(originX, y);
+            ctx.lineTo(originX + g.innerWidth, y);
+            ctx.stroke();
+        }
+
+        // vertical lines
+        for (let col = 0; col <= grid.columnCount; col++) {
+            const x = originX + grid.xScale(col) + 0.5;
+
+            ctx.beginPath();
+            ctx.moveTo(x, originY);
+            ctx.lineTo(x, originY + g.innerHeight);
+            ctx.stroke();
+        }
+
+        ctx.restore();
     }
 
     private getHostDimensions(): { width: number; height: number } {
