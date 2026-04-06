@@ -66,6 +66,17 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
 
     private redrawScheduled = false;
 
+    private readonly mockBucket: TimeBucket = {
+        startTime: new Date('2026-03-22T22:00:00'),
+        cells: [
+            { price: 1.0825, bidVolume: 12, askVolume: 30 },
+            { price: 1.0820, bidVolume: 24, askVolume: 18 },
+            { price: 1.0815, bidVolume: 35, askVolume: 9 },
+            { price: 1.0810, bidVolume: 17, askVolume: 22 },
+            { price: 1.0805, bidVolume: 8, askVolume: 14 },
+        ]
+    };
+
     ngAfterViewInit(): void {
         this.initChart();
 
@@ -147,8 +158,8 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         const grid: Grid = {
             rowCount: rowCount,
             columnCount: columnCount,
-            xScale: d3.scaleLinear().domain([0, columnCount]).range([0, geometry.innerWidth]),
-            yScale: d3.scaleLinear().domain([0, rowCount]).range([geometry.innerHeight, 0])
+            xScale: d3.scaleLinear().domain([0, columnCount]).range([0, columnCount * this.bucketWidth]),
+            yScale: d3.scaleLinear().domain([0, rowCount]).range([rowCount * this.pixelsPerTick, 0])
         }
 
         this.refreshSvg(geometry, grid);
@@ -250,6 +261,26 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
     private draw(ctx: CanvasRenderingContext2D, g: ChartGeometry, grid: Grid): void {
         // ctx.fillStyle = "lightblue";
         // ctx.fillRect(g.marginLeft, g.marginTop, g.innerWidth, g.innerHeight);
+        // draw a column
+        const cell = this.getCellBounds(g, grid, 2, 5);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 180, 0, 0.18)';
+        ctx.fillRect(cell.left, cell.top, cell.width, cell.height);
+
+        ctx.strokeStyle = 'rgba(0, 100, 0, 0.8)';
+        ctx.strokeRect(cell.left, cell.top, cell.width, cell.height);
+
+        // text styling
+        ctx.fillStyle = 'black';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // centered label
+        ctx.fillText('120126 x 13050', cell.centerX, cell.centerY);
+
+        ctx.restore();
 
         // draw the grid
         const originY = g.marginTop;
@@ -298,5 +329,60 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
 
         console.log('chart host size', result);
         return result;
+    }
+
+    private getColumnBounds(g: ChartGeometry, grid: Grid, columnIndex: number) {
+        const x1 = grid.xScale(columnIndex);
+        const x2 = grid.xScale(columnIndex + 1);
+
+        const columnWidth = x2 - x1;
+        const left = g.marginLeft + x1;
+
+        return {
+            left,
+            right: left + columnWidth,
+            width: columnWidth,
+            center: left + columnWidth / 2,
+        };
+    }
+
+    private getRowBounds(g: ChartGeometry, grid: Grid, rowIndex: number) {
+        const y1 = grid.yScale(rowIndex);
+        const y2 = grid.yScale(rowIndex + 1);
+
+        const topLocal = Math.min(y1, y2);
+        const bottomLocal = Math.max(y1, y2);
+
+        const top = g.marginTop + topLocal;
+        const bottom = g.marginTop + bottomLocal;
+        const height = bottom - top;
+
+        return {
+            top,
+            bottom,
+            height,
+            center: top + height / 2,
+        };
+    }
+
+    private getCellBounds(
+        g: ChartGeometry,
+        grid: Grid,
+        columnIndex: number,
+        rowIndex: number
+    ) {
+        const column = this.getColumnBounds(g, grid, columnIndex);
+        const row = this.getRowBounds(g, grid, rowIndex);
+
+        return {
+            left: column.left,
+            right: column.right,
+            top: row.top,
+            bottom: row.bottom,
+            width: column.width,
+            height: row.height,
+            centerX: column.center,
+            centerY: row.center,
+        };
     }
 }
