@@ -6,5 +6,7 @@ interface LadderCell {
 
 interface TimeBucket {
     startTime: Date;
+    open: number;
+    close: number;
     cells: LadderCell[];
 }

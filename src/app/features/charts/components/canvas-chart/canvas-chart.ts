@@ -58,6 +58,11 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
     private readonly bucketWidth = 120;
 
     /**
+     * The width of a bucket's sidebar in the chart.
+     */
+    private readonly barWidth = 8;
+
+    /**
      * The number of minutes in a single bucket.
      *
      * @private
@@ -66,10 +71,20 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
 
     private redrawScheduled = false;
 
+    private priceLevels: number[] = [];
+    private priceLevelIndex: Map<string, number> = new Map<string, number>();
+
+    private timeBuckets: Date[] = [];
+    private timeBucketIndex: Map<number, number> = new Map<number, number>();
+
+    private readonly anchorTime = new Date(2026, 0, 1, 20, 0);
+
     private readonly mockBucket: TimeBucket = {
-        startTime: new Date('2026-03-22T22:00:00'),
+        startTime: new Date(2026, 0, 1, 21, 30),
+        open: 1.0820,
+        close: 1.0810,
         cells: [
-            { price: 1.0825, bidVolume: 12, askVolume: 30 },
+            { price: 1.0825, bidVolume: 12, askVolume: 30, },
             { price: 1.0820, bidVolume: 24, askVolume: 18 },
             { price: 1.0815, bidVolume: 35, askVolume: 9 },
             { price: 1.0810, bidVolume: 17, askVolume: 22 },
@@ -162,6 +177,19 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
             yScale: d3.scaleLinear().domain([0, rowCount]).range([rowCount * this.pixelsPerTick, 0])
         }
 
+        // recalculate the data to be shown in the chart
+        this.priceLevels = d3.range(rowCount).map(i => 1.0740 + i * 0.0005);
+        this.priceLevelIndex = new Map(
+            this.priceLevels.map((price, i) => [price.toFixed(4), i])
+        );
+
+        this.timeBuckets = d3.range(columnCount).map(i =>
+            new Date(this.anchorTime.getTime() + i * this.bucketMinutes * 60 * 1000)
+        );
+        this.timeBucketIndex = new Map(
+            this.timeBuckets.map((date, i) => [date.getTime(), i])
+        );
+
         this.refreshSvg(geometry, grid);
         this.refreshCanvas(geometry, grid);
     }
@@ -187,11 +215,9 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
 
         // draw axes
         // y-axis
-        const visibleTickCount = grid.rowCount;
-        const priceLevels = d3.range(visibleTickCount).map(i => 1.0740 + i * 0.0005);
         const yScale = grid.yScale;
 
-        const priceTickPositions = priceLevels.map((price, i) => ({
+        const priceTickPositions = this.priceLevels.map((price, i) => ({
             y: i + 0.5,
             label: d3.format('.4f')(price)
         }));
@@ -209,15 +235,8 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
             .style('font-size', '16px');
 
         // x-axis
-        const anchorTime = new Date(2026, 0, 1, 21, 30);
-        const visibleColumnCount = grid.columnCount;
         const xScale = grid.xScale;
-
-        const timeBuckets = d3.range(visibleColumnCount).map(i =>
-            new Date(anchorTime.getTime() + i * this.bucketMinutes * 60 * 1000)
-        );
-
-        const timeTickPositions = timeBuckets.map((bucket, i) => ({
+        const timeTickPositions = this.timeBuckets.map((bucket, i) => ({
             x: i + 0.5,
             label: d3.timeFormat('%H:%M')(bucket)
         }));
@@ -259,28 +278,13 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
     }
 
     private draw(ctx: CanvasRenderingContext2D, g: ChartGeometry, grid: Grid): void {
-        // ctx.fillStyle = "lightblue";
-        // ctx.fillRect(g.marginLeft, g.marginTop, g.innerWidth, g.innerHeight);
-        // draw a column
-        const cell = this.getCellBounds(g, grid, 2, 5);
+        // draw the bucket
+        const startTime = this.mockBucket.startTime;
+        this.mockBucket.cells.forEach((cell) => {
+            this.drawCell(ctx, g, grid, startTime, cell);
+        });
 
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 180, 0, 0.18)';
-        ctx.fillRect(cell.left, cell.top, cell.width, cell.height);
-
-        ctx.strokeStyle = 'rgba(0, 100, 0, 0.8)';
-        ctx.strokeRect(cell.left, cell.top, cell.width, cell.height);
-
-        // text styling
-        ctx.fillStyle = 'black';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // centered label
-        ctx.fillText('120126 x 13050', cell.centerX, cell.centerY);
-
-        ctx.restore();
+        this.drawSideBar(ctx, g, grid, this.mockBucket);
 
         // draw the grid
         const originY = g.marginTop;
@@ -315,6 +319,100 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         ctx.restore();
     }
 
+    private drawSideBar(ctx: CanvasRenderingContext2D, g: ChartGeometry, grid: Grid, bucket: TimeBucket) {
+        const columnIndex = this.timeBucketIndex.get(bucket.startTime.getTime());
+        if (columnIndex == undefined) {
+            console.log(`Skipping cell for undefined time bucket: ${bucket.startTime}`);
+            return;
+        }
+
+        const openRowIndex = this.priceLevelIndex.get(bucket.open.toFixed(4));
+        if (openRowIndex == undefined) {
+            console.log(`Skipping cell for undefined price level: ${bucket.open}`);
+            return;
+        }
+
+        const closeRowIndex = this.priceLevelIndex.get(bucket.close.toFixed(4));
+        if (closeRowIndex == undefined) {
+            console.log(`Skipping cell for undefined price level: ${bucket.close}`);
+            return;
+        }
+
+        console.log(`Open price index ${openRowIndex}, close price index ${closeRowIndex}`)
+
+        const openRowBounds = this.getRowBounds(g, grid, openRowIndex);
+        const closeRowBounds = this.getRowBounds(g, grid, closeRowIndex);
+        const x = g.marginLeft + grid.xScale(columnIndex);
+        const y = bucket.close >= bucket.open
+            ? closeRowBounds.top
+            : openRowBounds.top
+        ;
+
+        const height = bucket.close >= bucket.open
+            ? Math.abs(closeRowBounds.top - openRowBounds.bottom)
+            : Math.abs(openRowBounds.top - closeRowBounds.bottom)
+        ;
+
+        ctx.save();
+        ctx.fillStyle = bucket.close >= bucket.open
+            ? 'rgba(0, 160, 0, 0.75)'
+            : 'rgba(200, 0, 0, 0.75)';
+
+        ctx.fillRect(x, y, this.barWidth, height);
+        ctx.restore();
+    }
+
+    private drawCell(ctx: CanvasRenderingContext2D, g: ChartGeometry, grid: Grid, startTime: Date, cell: LadderCell) {
+        const columnIndex = this.timeBucketIndex.get(startTime.getTime());
+        if (columnIndex == undefined) {
+            console.log(`Skipping cell for undefined time bucket: ${startTime}`);
+            return;
+        }
+
+        const rowIndex = this.priceLevelIndex.get(cell.price.toFixed(4));
+        if (rowIndex == undefined) {
+            console.log(`Skipping cell for undefined price level: ${cell.price}`);
+            return;
+        }
+
+        const bounds = this.getCellBounds(g, grid, columnIndex, rowIndex);
+
+        ctx.save();
+        ctx.fillStyle = this.getCellFill(cell);
+        ctx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
+
+        ctx.strokeStyle = 'rgba(0, 100, 0, 0.8)';
+        ctx.strokeRect(bounds.left, bounds.top, bounds.width, bounds.height);
+
+        // text styling
+        ctx.fillStyle = 'black';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // centered label
+        ctx.fillText(`${cell.bidVolume} x ${cell.askVolume}`, bounds.centerX, bounds.centerY);
+
+        ctx.restore();
+    }
+
+    private getCellFill(cell: LadderCell): string {
+        const delta = cell.askVolume - cell.bidVolume;
+        const magnitude = Math.abs(delta);
+
+        const alpha = Math.min(0.10 + magnitude / 100, 0.35);
+
+        if (delta > 0) {
+            return `rgba(0, 160, 0, ${alpha})`;
+        }
+
+        if (delta < 0) {
+            return `rgba(200, 0, 0, ${alpha})`;
+        }
+
+        return 'rgba(120, 120, 120, 0.10)';
+    }
+
     private getHostDimensions(): { width: number; height: number } {
         const host = this.chartRef().nativeElement;
         const rect = host.getBoundingClientRect();
@@ -322,13 +420,10 @@ export class CanvasChart implements AfterViewInit, OnDestroy {
         const hostWidth = Math.floor(rect.width);
         const hostHeight = Math.floor(rect.height);
 
-        const result = {
+        return {
             width: hostWidth,
             height: hostHeight
         };
-
-        console.log('chart host size', result);
-        return result;
     }
 
     private getColumnBounds(g: ChartGeometry, grid: Grid, columnIndex: number) {
